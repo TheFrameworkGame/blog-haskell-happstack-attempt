@@ -33,7 +33,7 @@ blogRoutes = msum
 --  , dir "query"   $ queryParams
 --  , dir "form"    $ formPage
 --  , dir "fortune" $ fortune
---  , dir "files"   $ fileServing
+  dir "static"   $ fileServing
 --  , dir "upload"  $ upload
     homePage
   ]
@@ -83,5 +83,7 @@ homePage =
             h2 $ a ! href "/post/" $ H.toHtml $ title post
             span ! class_ "post-author" $ H.toHtml $ "by " ++ (author post)
           div ! class_ "span6 tease" $ H.toHtml $ tease post
-          
 
+
+fileServing :: ServerPart Response
+fileServing = serveDirectory EnableBrowsing ["index.html"] "static"
