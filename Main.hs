@@ -7,7 +7,7 @@ import Data.Text (Text)
 import Data.Text.Lazy (unpack)
 --import Happstack.Server
 import Happstack.Lite
-import Text.Blaze.Html5 (Html, (!), a, form, input, p, toHtml, label, div, ul, li, h1, h2, span)
+import Text.Blaze.Html5 (Html, (!), a, form, input, p, toHtml, label, div, ul, li, h1, h2, span, toValue)
 import Text.Blaze.Html5.Attributes (action, enctype, href, name, size, type_, value, class_, rel, media)
 import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html5.Attributes as A
@@ -34,6 +34,7 @@ blogRoutes = msum
 --  , dir "form"    $ formPage
 --  , dir "fortune" $ fortune
   dir "static"   $ fileServing,
+  dir "post"   $ postDetail,
 --  , dir "upload"  $ upload
     homePage
   ]
@@ -42,14 +43,19 @@ blogRoutes = msum
 
 data Post = Post {
   title :: String,
+  slug :: String,
   tease :: String,
   author :: String
 } deriving (Show)
 
+-- TODO: replace this with acid-state
 posts = [
-    Post { title = "About the model layer", tease = "The model has a central position in a Play! application.", author = "Bob Johnson" }
-  , Post { title = "The MVC application", tease = "A Play! application follows the MVC architectural pattern.", author = "Jeff" }
-  , Post { title = "Just a test of YABE", tease = "a test.", author = "Bob Johnson" } ]
+    Post { title = "About the model layer", slug = "about-the-model-layer", tease = "The model has a central position in a Play! application.", author = "Bob Johnson" }
+  , Post { title = "The MVC application", slug = "the-mvc-application", tease = "A Play! application follows the MVC architectural pattern.", author = "Jeff" }
+  , Post { title = "Just a test of YABE", slug = "just-a-test-of-yabe", tease = "a test.", author = "Bob Johnson" } ]
+
+postBySlug :: String -> Post
+postBySlug s = head $ filter (\post -> s == (slug post)) posts
 
 -- Views + Controllers
 
@@ -78,6 +84,12 @@ template body = toResponse $
   where
     title = "The Framework Game"
 
+-- utility methods
+hTitle = toHtml . title
+hTease = toHtml . tease
+hAuthor post = toHtml $ "by " ++ (author post)
+getUrl post = toValue $ "/post/" ++ (slug post)
+
 homePage :: ServerPart Response
 homePage =
     ok $ template $ do
@@ -85,9 +97,20 @@ homePage =
       forM_ posts $ \post -> do
         div ! class_ "row" $ do
           div ! class_ "span8" $ do
-            h2 $ a ! href "/post/" $ toHtml $ title post
-            span ! class_ "post-author" $ toHtml $ "by " ++ (author post)
-          div ! class_ "span6 tease" $ toHtml $ tease post
+            h2 $ a ! href (getUrl post) $ hTitle post
+            span ! class_ "post-author" $ hAuthor post
+          div ! class_ "span6 tease" $ hTease post
+
+postDetail :: ServerPart Response
+postDetail =
+  path $ \(slugArg :: String) ->
+    ok $ template $ do
+    let post = postBySlug slugArg
+    -- TODO: predecessor, successor
+    div ! class_ "row" $ div ! class_ "span14" $ do
+      h2 $ a ! href "#" $ hTitle post
+      span ! class_ "post-author" $ hAuthor post
+      div ! class_ "post-body" $ hTease post
 
 fileServing :: ServerPart Response
 fileServing = serveDirectory EnableBrowsing ["index.html"] "static"
