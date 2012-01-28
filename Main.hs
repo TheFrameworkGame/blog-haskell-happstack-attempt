@@ -8,7 +8,7 @@ import Data.Text.Lazy (unpack)
 --import Happstack.Server
 import Happstack.Lite
 import Text.Blaze.Html5 (Html, (!), a, form, input, p, toHtml, label, div, ul, li, h1, h2, span)
-import Text.Blaze.Html5.Attributes (action, enctype, href, name, size, type_, value, class_)
+import Text.Blaze.Html5.Attributes (action, enctype, href, name, size, type_, value, class_, rel, media)
 import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html5.Attributes as A
 import Prelude hiding (div, span)
@@ -33,7 +33,7 @@ blogRoutes = msum
 --  , dir "query"   $ queryParams
 --  , dir "form"    $ formPage
 --  , dir "fortune" $ fortune
-  dir "static"   $ fileServing
+  dir "static"   $ fileServing,
 --  , dir "upload"  $ upload
     homePage
   ]
@@ -52,24 +52,31 @@ posts = [
   , Post { title = "Just a test of YABE", tease = "a test.", author = "Bob Johnson" } ]
 
 -- Views + Controllers
+
+css loc = H.link ! rel "stylesheet" ! media "screen" ! href loc
+
 template :: Html -> Response
 template body = toResponse $
   H.html $ do
     H.head $ do
       H.title title
+      css "/static/stylesheets/bootstrap.min.css"
+      css "/static/stylesheets/main.css"
     H.body $ do
-      div ! class_ "topbar" $ do
+      div ! class_ "topbar" $ div ! class_ "fill" $ div ! class_ "container" $ do
         ul ! class_ "nav" $ do
           li ! class_ "active" $ a ! href "/" $ "home"
           li $ a ! href "/admin" $ "admin"
+        ul ! class_ "nav secondary-nav" $ do
+          li $ a ! href "/secure/login" $ "login"
       div ! class_ "container" $ do
         div ! class_ "content" $ do
           div ! class_ "page-header" $ h1 $ "The Framework Game in Happstack"
           body
-      H.footer $ do
-        p $ do
-          "learn "
-          a ! href "http://happstack.com/index.html" $ "more"
+        H.footer $ do
+          p $ do
+            "learn "
+            a ! href "http://happstack.com/index.html" $ "more"
   where
     title = "The Framework Game"
 
@@ -80,10 +87,9 @@ homePage =
       forM_ posts $ \post -> do
         div ! class_ "row" $ do
           div ! class_ "span8" $ do
-            h2 $ a ! href "/post/" $ H.toHtml $ title post
-            span ! class_ "post-author" $ H.toHtml $ "by " ++ (author post)
-          div ! class_ "span6 tease" $ H.toHtml $ tease post
-
+            h2 $ a ! href "/post/" $ toHtml $ title post
+            span ! class_ "post-author" $ toHtml $ "by " ++ (author post)
+          div ! class_ "span6 tease" $ toHtml $ tease post
 
 fileServing :: ServerPart Response
 fileServing = serveDirectory EnableBrowsing ["index.html"] "static"
