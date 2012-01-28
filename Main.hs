@@ -74,9 +74,7 @@ template body = toResponse $
           div ! class_ "page-header" $ h1 $ "The Framework Game in Happstack"
           body
         H.footer $ do
-          p $ do
-            "learn "
-            a ! href "http://happstack.com/index.html" $ "more"
+          p $ "learn " >> (a ! href "http://happstack.com/index.html" $ "more")
   where
     title = "The Framework Game"
 
