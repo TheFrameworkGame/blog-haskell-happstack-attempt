@@ -1,0 +1,11 @@
+Happstack Blog
+--------------
+
+Happstack blog implementation.  Tested under GHC 7.03.
+
+Installation
+------------
+
+cabal update
+cabal install happstack-lite
+cabal install acid-state
