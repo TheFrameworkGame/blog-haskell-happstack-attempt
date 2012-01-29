@@ -24,6 +24,8 @@ import Text.Blaze (Html)
 import Text.Blaze.Renderer.Pretty (renderHtml)
 import Control.Applicative
 
+import Maybe (fromJust)
+
 import Control.Monad (forM_)
 
 import Blog.Models
@@ -38,20 +40,26 @@ postDetail acid = postOr404 acid postView
 listForm :: (Read a, Show a, Monad m, Functor m) => [a] -> HappstackForm m Html BlazeFormHtml [a]
 listForm def = inputTextRead "Can't read list" (Just def) <++ errors
 
-idForm :: (Monad m, Functor m) => HappstackForm m Html BlazeFormHtml PostId
-idForm = inputTextRead "id (sigh)" Nothing <++ errors
+idForm :: (Monad m, Functor m) => Maybe PostId
+       -> HappstackForm m Html BlazeFormHtml PostId
+idForm id = do
+    let someText = fmap show id
+    transform (inputHidden' someText) (transformRead "internal error")
+
+options :: [(Status,Html)]
+options = [(Published,"Published"),(Draft,"Draft")]
 
 -- TODO: hide the date and the id
 postForm :: (Monad m, Functor m) => Maybe Post
          -> HappstackForm m Html BlazeFormHtml Post
-postForm post = Post <$> label "id" ++> idForm
+postForm post = Post <$> idForm (fmap postId post)
                 <*> label "Title" ++> (inputText $ fmap title post)
                 <*> label "slug" ++> (inputText $ fmap slug post)
                 <*> label "author" ++> (inputText $ fmap author post)
-                <*> label "body" ++> (inputText $ fmap body post)
-                <*> label "tease" ++> (inputText $ fmap tease post)
+                <*> label "body" ++> (inputTextArea Nothing Nothing $ fmap body post)
+                <*> label "tease" ++> (inputTextArea Nothing Nothing $ fmap tease post)
                 <*> label "date" ++> (inputTextRead undefined $ fmap date post)
-                <*> label "Status" ++> (inputTextRead undefined $ fmap status post)
+                <*> label "Status" ++> (inputSelect (status $ fromJust post) options)
                 <*> label "Tags" ++> listForm []
 
 -- Eurgh, manual crud
