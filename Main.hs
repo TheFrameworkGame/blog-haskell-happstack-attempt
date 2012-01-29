@@ -1,10 +1,26 @@
-{-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, RecordWildCards, TemplateHaskell
+  , TypeFamilies, OverloadedStrings, ScopedTypeVariables #-}
 module Main where
 
-import Control.Applicative ((<$>), optional)
+import Control.Applicative  ((<$>), optional)
+import Control.Exception    (bracket)
+import Control.Monad        (msum, mzero)
+import Control.Monad.Reader (ask)
+import Control.Monad.State  (get, put)
+import Control.Monad.Trans  (liftIO)
+import Data.Acid            (AcidState, Update, Query, makeAcidic, openLocalState)
+import Data.Acid.Advanced   (update', query')
+import Data.Acid.Local      (createCheckpointAndClose)
+import Data.Data            (Data, Typeable)
+import Data.IxSet           (Indexable(..), IxSet(..), (@=), Proxy(..), getOne, ixFun, ixSet)
+import qualified Data.IxSet as IxSet
+import Data.SafeCopy        (SafeCopy, base, deriveSafeCopy)
+import Data.Text            (Text, pack, append)
+import Data.Text.Lazy       (toStrict, unpack)
+import qualified Data.Text  as Text
+import Data.Time            (UTCTime(..), getCurrentTime)
+
 import Data.Maybe (fromMaybe)
-import Data.Text (Text)
-import Data.Text.Lazy (unpack)
 --import Happstack.Server
 import Happstack.Lite
 import Text.Blaze.Html5 (Html, (!), a, form, input, p, toHtml, label, div, ul, li, h1, h2, span, toValue)
@@ -15,47 +31,118 @@ import Prelude hiding (div, span)
 
 import Control.Monad
 
-config :: ServerConfig
-config =
-    ServerConfig { port      = 8001
-                 , ramQuota  = 1 * 10^6
-                 , diskQuota = 20 * 10^6
-                 , tmpDir    = "/tmp/"
-                 }
-
-main :: IO ()
-main = serve (Just config) blogRoutes
-
--- Routing
-blogRoutes :: ServerPart Response
-blogRoutes = msum
-  [ --dir "echo"    $ echo
---  , dir "query"   $ queryParams
---  , dir "form"    $ formPage
---  , dir "fortune" $ fortune
-  dir "static"   $ fileServing,
-  dir "post"   $ postDetail,
---  , dir "upload"  $ upload
-    homePage
-  ]
-
 -- Models
 
-data Post = Post {
-  title :: String,
-  slug :: String,
-  tease :: String,
-  author :: String
-} deriving (Show)
+newtype PostId = PostId { unPostId :: Integer }
+    deriving (Eq, Ord, Data, Enum, Typeable, SafeCopy)
+data Status =
+    Draft 
+  | Published 
+    deriving (Eq, Ord, Data, Typeable)
 
--- TODO: replace this with acid-state
-posts = [
-    Post { title = "About the model layer", slug = "about-the-model-layer", tease = "The model has a central position in a Play! application.", author = "Bob Johnson" }
-  , Post { title = "The MVC application", slug = "the-mvc-application", tease = "A Play! application follows the MVC architectural pattern.", author = "Jeff" }
-  , Post { title = "Just a test of YABE", slug = "just-a-test-of-yabe", tease = "a test.", author = "Bob Johnson" } ]
+$(deriveSafeCopy 0 'base ''Status)
 
-postBySlug :: String -> Post
-postBySlug s = head $ filter (\post -> s == (slug post)) posts
+data Post = Post
+    { postId  :: PostId
+    , title   :: Text
+    , slug    :: Text
+    , author  :: Text
+    , body    :: Text
+    , tease   :: Text
+    , date    :: UTCTime
+    , status  :: Status
+    , tags    :: [Text]
+    }
+    deriving (Eq, Ord, Data, Typeable)
+
+$(deriveSafeCopy 0 'base ''Post)
+
+newtype Title     = Title Text    deriving (Eq, Ord, Data, Typeable, SafeCopy)
+newtype Slug      = Slug Text    deriving (Eq, Ord, Data, Typeable, SafeCopy)
+newtype Author    = Author Text   deriving (Eq, Ord, Data, Typeable, SafeCopy)
+newtype Tag       = Tag Text      deriving (Eq, Ord, Data, Typeable, SafeCopy)
+-- newtype WordCount = WordCount Int deriving (Eq, Ord, Data, Typeable, SafeCopy)
+instance Indexable Post where
+    empty = ixSet [ ixFun $ \bp -> [ postId bp ]
+                  , ixFun $ \bp -> [ Title  $ title bp  ]
+                  , ixFun $ \bp -> [ Slug $ slug bp  ]
+                  , ixFun $ \bp -> [ Author $ author bp ]
+                  , ixFun $ \bp -> [ status bp ]
+                  , ixFun $ \bp -> map Tag (tags bp)
+                  , ixFun $ (:[]) . date  -- point-free, just for variety
+--                  , ixFun $ \bp -> [ WordCount (length $ Text.words $ body bp) ]
+                  ]
+
+data Blog = Blog
+    { nextPostId :: PostId
+    , posts      :: IxSet Post
+    }
+    deriving (Data, Typeable)
+             
+$(deriveSafeCopy 0 'base ''Blog)
+
+post1 :: Post
+post1 = Post { postId = PostId 1
+            , title  = pack "About the model layer"
+            , slug   = pack "about-the-model-layer"
+            , author = pack "Bob Johnson"
+            , body   = pack "sigh sigh sigh, why so serious?"
+            , tease  = pack "The model has a central position in an application."
+            , date   = (read "2011-11-19 18:28:52.607875 UTC")::UTCTime
+            , status = Published
+            , tags   = []
+            }
+
+initialBlogState :: Blog
+initialBlogState =
+    Blog { nextPostId = PostId 2
+         , posts      = IxSet.insert post1 empty
+         }
+-- | create a new, empty post and add it to the database
+newPost :: UTCTime -> Update Blog Post
+newPost pubDate =
+    do b@Blog{..} <- get
+       let post = Post { postId = nextPostId
+                       , title  = Text.empty
+                       , slug   = Text.empty
+                       , author = Text.empty
+                       , body   = Text.empty
+                       , tease  = Text.empty
+                       , date   = pubDate
+                       , status = Draft
+                       , tags   = []
+                       }
+       put $ b { nextPostId = succ nextPostId
+               , posts      = IxSet.insert post posts
+               }
+       return post
+-- | update the post in the database (indexed by PostId)
+updatePost :: Post -> Update Blog ()
+updatePost updatedPost =
+    do b@Blog{..} <- get
+       put $ b { posts = IxSet.updateIx (postId updatedPost) updatedPost posts
+               }
+postById :: PostId -> Query Blog (Maybe Post)
+postById pid = 
+     do Blog{..} <- ask
+        return $ getOne $ posts @= pid
+
+postBySlug :: Slug -> Query Blog (Maybe Post)
+postBySlug slug = 
+     do Blog{..} <- ask
+        return $ getOne $ posts @= slug
+
+postsByStatus :: Status -> Query Blog [Post]
+postsByStatus status =
+    do Blog{..} <- ask
+       return $ IxSet.toDescList (Proxy :: Proxy UTCTime) $ posts @= status
+$(makeAcidic ''Blog
+  [ 'newPost
+  , 'updatePost
+  , 'postById
+  , 'postBySlug
+  , 'postsByStatus
+  ])
 
 -- Views + Controllers
 
@@ -87,30 +174,64 @@ template body = toResponse $
 -- utility methods
 hTitle = toHtml . title
 hTease = toHtml . tease
-hAuthor post = toHtml $ "by " ++ (author post)
-getUrl post = toValue $ "/post/" ++ (slug post)
+hBody = toHtml . body
+hAuthor post = toHtml $ append "by " $ author post
+getUrl post = toValue $ append "/post/"  $ slug post
 
-homePage :: ServerPart Response
-homePage =
+homePage :: AcidState Blog -> ServerPart Response
+homePage acid = do
+    published <- query' acid (PostsByStatus Published)
     ok $ template $ do
       -- TODO: categories
-      forM_ posts $ \post -> do
+      forM_ published $ \post -> do
         div ! class_ "row" $ do
           div ! class_ "span8" $ do
             h2 $ a ! href (getUrl post) $ hTitle post
             span ! class_ "post-author" $ hAuthor post
           div ! class_ "span6 tease" $ hTease post
 
-postDetail :: ServerPart Response
-postDetail =
-  path $ \(slugArg :: String) ->
-    ok $ template $ do
-    let post = postBySlug slugArg
-    -- TODO: predecessor, successor
-    div ! class_ "row" $ div ! class_ "span14" $ do
-      h2 $ a ! href "#" $ hTitle post
-      span ! class_ "post-author" $ hAuthor post
-      div ! class_ "post-body" $ hTease post
+postDetail :: AcidState Blog -> ServerPart Response
+postDetail acid = 
+  path $ \(slugArg :: String) -> do
+    mbPost <- query' acid $ PostBySlug (Slug $ pack slugArg)
+    case mbPost of
+      Nothing ->
+        notFound $ template $ "Couldn't find post with slug: " >> toHtml slugArg
+      (Just post) ->
+        ok $ template $ do
+        -- TODO: predecessor, successor
+        div ! class_ "row" $ div ! class_ "span14" $ do
+          h2 $ a ! href "#" $ hTitle post
+          span ! class_ "post-author" $ hAuthor post
+          div ! class_ "post-body" $ hBody post
 
 fileServing :: ServerPart Response
 fileServing = serveDirectory EnableBrowsing ["index.html"] "static"
+
+config :: ServerConfig
+config =
+    ServerConfig { port      = 8001
+                 , ramQuota  = 1 * 10^6
+                 , diskQuota = 20 * 10^6
+                 , tmpDir    = "/tmp/"
+                 }
+
+main :: IO ()
+main = 
+    do bracket (openLocalState initialBlogState)
+               (createCheckpointAndClose)
+               (\acid -> serve (Just config) (blogRoutes acid))
+
+-- Routing
+blogRoutes :: AcidState Blog -> ServerPart Response
+blogRoutes acid = msum
+  [ --dir "echo"    $ echo
+--  , dir "query"   $ queryParams
+--  , dir "form"    $ formPage
+--  , dir "fortune" $ fortune
+    dir "static"   $ fileServing,
+    dir "post"   $ postDetail acid,
+--  , dir "upload"  $ upload
+    homePage acid
+  ]
+
