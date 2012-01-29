@@ -64,9 +64,11 @@ editPost acid = postOr404 acid $ \post -> do
         H.style ! A.type_ "text/css" $ do
             "input {display: block;}\n"
         H.form ! A.enctype (toValue $ show enctype)
-               ! A.method "POST" ! A.action "" $ do
+               ! A.method "POST" ! A.action "" $ H.fieldset $ do
+          H.legend $ "Edit a post"
           formHtml'
-          H.input ! A.type_ "submit" ! A.value "save"
+          H.div ! A.class_ "actions" $ H.input ! A.class_ "btn primary"
+                ! A.type_ "submit" ! A.value "save"
       Right updatedPost -> do
         update' acid (UpdatePost updatedPost)
         seeOther ("/post/"++ (unpack $ slug post)) (toResponse ())
