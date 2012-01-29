@@ -2,10 +2,18 @@ Happstack Blog
 --------------
 
 Happstack blog implementation.  Tested under GHC 7.03.
+View uses Blaze.  Models are based on acid-state + ixset.
+Controllers use digestive functors.
 
 Installation
 ------------
 
 cabal update
-cabal install happstack-lite
-cabal install acid-state
+cabal configure
+cabal build
+
+If you're just debugging/toying you can then just use:
+
+    runhaskell Main.hs
+
+in order to get a quick turnaround.
