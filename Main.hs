@@ -34,6 +34,7 @@ blogRoutes acid = msum
   [
     dir "static"   $ fileServing,
     dir "post"     $ postDetail acid,
+    dir "edit"     $ editPost acid,
     homePage acid
   ]
 

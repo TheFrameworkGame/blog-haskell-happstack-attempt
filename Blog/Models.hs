@@ -21,11 +21,11 @@ import qualified Data.Text  as Text
 import Data.Time            (UTCTime(..), getCurrentTime)
 
 newtype PostId = PostId { unPostId :: Integer }
-    deriving (Eq, Ord, Data, Enum, Typeable, SafeCopy)
+    deriving (Eq, Ord, Data, Enum, Read, Show, Typeable, SafeCopy)
 data Status =
     Draft 
   | Published 
-    deriving (Eq, Ord, Data, Typeable)
+    deriving (Eq, Ord, Data, Typeable, Read, Show)
 
 $(deriveSafeCopy 0 'base ''Status)
 

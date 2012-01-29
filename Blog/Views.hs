@@ -4,7 +4,8 @@
 module Blog.Views (
     postListView,
     postView,
-    err404
+    err404,
+    template
 ) where
 
 import Control.Monad                (forM_)
