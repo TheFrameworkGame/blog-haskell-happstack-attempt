@@ -1,0 +1,15 @@
+Name:               blog-happstack
+Version:            0.1
+Description:        A simple blog written in happstack
+License:            MIT
+License-file:       LICENSE
+Author:             Richard Warburton
+Maintainer:         richard.warburton@gmail.com
+Build-Type:         Simple
+Cabal-Version:      >=1.4
+
+Executable blog-happstack
+    Main-is:        Main.hs
+    Build-Depends:  base >= 4 && <= 5, blaze-html, happstack-lite,
+                    acid-state, ixset, time, text, safecopy,
+                    mtl
