@@ -4,6 +4,7 @@
 module Blog.Controllers (
     homePage,
     postDetail,
+    postDetail2,
     editPost
 ) where
 
@@ -28,6 +29,8 @@ import Maybe (fromJust)
 
 import Control.Monad (forM_)
 
+import Happstack.Crud
+
 import Blog.Models
 import Blog.Views
 
@@ -36,6 +39,9 @@ homePage acid = query' acid (PostsByStatus Published) >>= postListView
 
 postDetail :: AcidState Blog -> ServerPart Response
 postDetail acid = postOr404 acid postView
+
+postDetail2 :: AcidState Blog -> ServerPart Response
+postDetail2 acid = postOr404 acid $ \post -> genericReadViewOf post template ["tags"]
 
 listForm :: (Read a, Show a, Monad m, Functor m) => [a] -> HappstackForm m Html BlazeFormHtml [a]
 listForm def = inputTextRead "Can't read list" (Just def) <++ errors
