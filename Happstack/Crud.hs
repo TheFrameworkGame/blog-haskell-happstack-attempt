@@ -77,8 +77,26 @@ genericUpdateViewOf value template = msum [ viewForm, processForm ]
 
 -- genericListOf
 -- genericDeleteOf
--- genericCrudOf
 
+-- TODO: work out how to abstract over the Update & Query types from acid-state
+-- Are these sensible types?
+{-
+type CreateData = Data d => ServerPart d
+type UpdateData = Data d => ServerPart d -> ServerPart d
+type DeleteData = Data d => ServerPart ()
+-}
+
+-- Is it possible to do something like this or do I need template haskell?
+-- genericCrudOf :: String -> CreateData -> UpdateData -> DeleteData ->
+{-
+genericCrudOf prefix create update delete = msum
+    [
+        dir $ prefix ++ "/create" $ genericCreateOf 
+        dir $ prefix ++ "/read" $ genericReadOf 
+        dir $ prefix ++ "/update" $ genericUpdateOf 
+        dir $ prefix ++ "/list" $ genericListOf 
+    ]
+-}
 -- Utility Functions
 formatTitle :: String -> String
 formatTitle str = (toUpper $ head str) : (tail str)
