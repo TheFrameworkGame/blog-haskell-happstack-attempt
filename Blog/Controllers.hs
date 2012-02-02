@@ -5,6 +5,7 @@ module Blog.Controllers (
     homePage,
     postDetail,
     postDetail2,
+    postCrud,
     editPost
 ) where
 
@@ -42,6 +43,9 @@ postDetail acid = postOr404 acid postView
 
 postDetail2 :: AcidState Blog -> ServerPart Response
 postDetail2 acid = postOr404 acid $ \post -> genericReadViewOf post template ["tags"]
+
+postCrud :: AcidState Blog -> ServerPart Response
+postCrud acid = postOr404 acid $ \post -> genericUpdateViewOf post template
 
 listForm :: (Read a, Show a, Monad m, Functor m) => [a] -> HappstackForm m Html BlazeFormHtml [a]
 listForm def = inputTextRead "Can't read list" (Just def) <++ errors

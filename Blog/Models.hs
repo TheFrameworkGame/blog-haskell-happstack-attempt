@@ -40,7 +40,7 @@ data Post = Post
     , status  :: Status
     , tags    :: [Text]
     }
-    deriving (Eq, Ord, Data, Typeable)
+    deriving (Eq, Ord, Data, Typeable, Show)
 
 $(deriveSafeCopy 0 'base ''Post)
 
